@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>课程表 · 大学生日程助手</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+<style>
+  :root{
+    --paper: #FAF7F0;
+    --paper-line: #E4DFD2;
+    --ink: #26241F;
+    --ink-soft: #6B6656;
+    --accent: #3E5C9A;
+    --accent-soft: #E7ECF6;
+    --card: #FFFFFF;
+
+    --c-study: #3E6CE0;
+    --c-study-bg: #E7ECFB;
+    --c-fitness: #E0762F;
+    --c-fitness-bg: #FBEBDF;
+    --c-work: #2F8F72;
+    --c-work-bg: #E1F1EB;
+    --c-social: #C24A72;
+    --c-social-bg: #F7E4EC;
+    --c-fun: #C79A21;
+    --c-fun-bg: #F7EFD8;
+    --c-rest: #6E6A8C;
+    --c-rest-bg: #EBEAF3;
+    --c-other: #7A5AC0;
+    --c-other-bg: #EEE8FA;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft Yahei","Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{min-height:100vh;display:flex;flex-direction:column;}
+
+  /* ---------- header ---------- */
+  .topbar{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:22px 28px 14px 28px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .topbar h1{
+    font-size:22px;font-weight:700;margin:0;letter-spacing:.2px;
+  }
+  .topbar .sub{color:var(--ink-soft);font-size:13px;margin-top:4px;}
+  .topbar-actions{display:flex;gap:10px;}
+  .btn{
+    border:1px solid var(--paper-line);background:var(--card);color:var(--ink);
+    padding:8px 14px;border-radius:8px;font-size:13.5px;cursor:pointer;
+    transition:border-color .15s ease, transform .1s ease;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn:active{transform:translateY(1px);}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn-primary:hover{opacity:.92;border-color:var(--accent);}
+  .btn-ghost{border-color:transparent;color:var(--ink-soft);}
+  .btn-ghost:hover{color:var(--ink);border-color:var(--paper-line);}
+
+  /* ---------- layout ---------- */
+  .layout{
+    flex:1;display:flex;gap:20px;padding:20px 28px 28px 28px;align-items:flex-start;
+  }
+
+  /* ---------- sidebar ---------- */
+  .sidebar{
+    width:210px;flex:0 0 210px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:12px;
+    padding:16px;
+    position:sticky; top:20px;
+  }
+  .sidebar h2{
+    font-size:13px;font-weight:600;margin:0 0 3px 0;color:var(--ink);
+  }
+  .sidebar .hint{font-size:12px;color:var(--ink-soft);margin:0 0 14px 0;line-height:1.5;}
+  .chip{
+    display:flex;align-items:center;gap:9px;
+    padding:10px 11px;margin-bottom:8px;
+    border-radius:9px;
+    cursor:grab;
+    border:1px solid transparent;
+    user-select:none;
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .chip:active{cursor:grabbing;}
+  .chip:hover{transform:translateY(-1px) rotate(-0.3deg);box-shadow:0 4px 10px rgba(0,0,0,.07);}
+  .chip .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .chip .emoji{font-size:15px;}
+  .chip .label{font-size:13.5px;font-weight:600;}
+
+  .legend{margin-top:18px;padding-top:14px;border-top:1px dashed var(--paper-line);}
+  .legend h2{font-size:12px;color:var(--ink-soft);font-weight:600;margin:0 0 10px 0;}
+  .legend-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .legend-row .name{font-size:12px;width:56px;flex:0 0 auto;color:var(--ink-soft);}
+  .legend-row .bar-track{flex:1;height:6px;background:var(--paper);border-radius:4px;overflow:hidden;}
+  .legend-row .bar-fill{height:100%;border-radius:4px;}
+  .legend-row .hrs{font-size:11px;color:var(--ink-soft);width:30px;text-align:right;flex:0 0 auto;}
+
+  /* ---------- schedule grid ---------- */
+  .board-wrap{
+    flex:1;min-width:0;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:12px;
+    overflow:auto;
+    max-height:calc(100vh - 130px);
+  }
+  .board{
+    display:grid;
+    grid-template-columns:52px repeat(7, minmax(108px,1fr));
+    min-width:820px;
+  }
+  .board .head-cell{
+    position:sticky; top:0; z-index:3;
+    background:var(--card);
+    border-bottom:1px solid var(--paper-line);
+    padding:10px 6px;
+    text-align:center;
+    font-size:13px;font-weight:700;
+  }
+  .board .head-cell .date-note{display:block;font-size:10.5px;color:var(--ink-soft);font-weight:400;margin-top:2px;}
+  .board .corner{position:sticky; top:0; left:0; z-index:4; background:var(--card); border-bottom:1px solid var(--paper-line);}
+  .board .time-cell{
+    position:sticky; left:0; z-index:2;
+    background:var(--card);
+    font-size:11px;color:var(--ink-soft);
+    text-align:right;padding:2px 8px 0 0;
+    border-top:1px solid var(--paper-line);
+    height:52px;
+  }
+  .cell{
+    border-top:1px solid var(--paper-line);
+    border-left:1px solid var(--paper-line);
+    height:52px;
+    padding:3px;
+    position:relative;
+  }
+  .cell.drag-over{background:var(--accent-soft);}
+  .block{
+    height:100%;
+    border-radius:7px;
+    padding:6px 8px;
+    cursor:pointer;
+    position:relative;
+    display:flex;flex-direction:column;justify-content:center;
+    border:1px solid rgba(0,0,0,.04);
+  }
+  .block .b-title{font-size:12.5px;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .block .b-cat{font-size:10.5px;opacity:.75;margin-top:1px;}
+  .block .b-note-dot{
+    position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55;
+  }
+  .block .b-remove{
+    position:absolute;top:2px;right:2px;
+    width:16px;height:16px;border-radius:50%;
+    display:none;align-items:center;justify-content:center;
+    font-size:11px;line-height:1;background:rgba(0,0,0,.12);color:inherit;
+  }
+  .block:hover .b-remove{display:flex;}
+
+  /* ---------- modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(38,36,31,.35);
+    display:flex;align-items:center;justify-content:center;z-index:50;
+    padding:20px;
+  }
+  .modal{
+    background:var(--card);border-radius:14px;width:420px;max-width:100%;
+    padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.18);
+  }
+  .modal h3{margin:0 0 4px 0;font-size:16px;}
+  .modal .cat-tag{
+    display:inline-block;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;margin-bottom:14px;
+  }
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .field input[type=text], .field textarea{
+    width:100%;border:1px solid var(--paper-line);border-radius:8px;
+    padding:9px 10px;font-size:13.5px;font-family:inherit;color:var(--ink);
+    background:var(--paper);
+  }
+  .field textarea{min-height:90px;resize:vertical;line-height:1.5;}
+  .field input:focus, .field textarea:focus{outline:none;border-color:var(--accent);}
+  .modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
+
+  /* ---------- AI drawer ---------- */
+  .ai-drawer{
+    position:fixed;top:0;right:0;bottom:0;width:380px;max-width:92vw;
+    background:var(--card);box-shadow:-14px 0 40px rgba(0,0,0,.12);
+    z-index:60; padding:22px; display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform .25s ease;
+  }
+  .ai-drawer.open{transform:translateX(0);}
+  .ai-drawer-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .ai-drawer-head h3{margin:0 0 3px 0;font-size:16px;}
+  .ai-drawer-head p{margin:0;font-size:12px;color:var(--ink-soft);}
+  .ai-body{flex:1;overflow-y:auto;font-size:13.5px;line-height:1.7;white-space:pre-wrap;}
+  .ai-empty{color:var(--ink-soft);font-size:13px;line-height:1.7;}
+  .ai-loading{display:flex;align-items:center;gap:9px;color:var(--ink-soft);font-size:13px;}
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--paper-line);border-top-color:var(--accent);animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .backdrop-dim{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:55;}
+
+  .close-x{border:none;background:none;font-size:18px;color:var(--ink-soft);cursor:pointer;line-height:1;padding:2px;}
+  .close-x:hover{color:var(--ink);}
+
+  /* ---------- trash zone (drag block here to delete) ---------- */
+  .trash-zone{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    display:flex; align-items:center; gap:8px;
+    padding:12px 22px;
+    border-radius:30px;
+    border:1.5px dashed var(--ink-soft);
+    background:var(--card);
+    color:var(--ink-soft);
+    font-size:13.5px; font-weight:600;
+    box-shadow:0 10px 30px rgba(0,0,0,.12);
+    z-index:70;
+    pointer-events:auto;
+    transition:background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
+  }
+  .trash-zone .icon{font-size:16px;}
+  .trash-zone.active{
+    background:#FDEBEA; border-color:#C0392B; color:#C0392B;
+    transform:translateX(-50%) scale(1.05);
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const { createApp, reactive, computed, ref } = Vue;
+
+const CATEGORIES = [
+  { key:'study',   name:'学习',   emoji:'📚', color:'var(--c-study)',   bg:'var(--c-study-bg)' },
+  { key:'fitness', name:'健身',   emoji:'🏃', color:'var(--c-fitness)', bg:'var(--c-fitness-bg)' },
+  { key:'work',    name:'作业',   emoji:'📝', color:'var(--c-work)',    bg:'var(--c-work-bg)' },
+  { key:'social',  name:'社交',   emoji:'👥', color:'var(--c-social)',  bg:'var(--c-social-bg)' },
+  { key:'fun',     name:'娱乐',   emoji:'🎮', color:'var(--c-fun)',     bg:'var(--c-fun-bg)' },
+  { key:'rest',    name:'休息',   emoji:'🛌', color:'var(--c-rest)',    bg:'var(--c-rest-bg)' },
+  { key:'other',   name:'其他',   emoji:'✨', color:'var(--c-other)',   bg:'var(--c-other-bg)' },
+];
+
+const DAYS = ['周一','周二','周三','周四','周五','周六','周日'];
+const HOURS = Array.from({length:18}, (_,i)=> i+6); // 6:00 - 23:00
+
+const App = {
+  setup(){
+    const catByKey = Object.fromEntries(CATEGORIES.map(c=>[c.key,c]));
+
+    // blocks keyed by "day-hour" -> {id, categoryKey, title, notes}
+    const blocks = reactive({});
+    let uid = 1;
+
+    const dragPayload = ref(null); // {mode:'new', categoryKey} | {mode:'move', fromKey}
+    const dragOverKey = ref(null);
+    const isDraggingBlock = ref(false); // true while an already-placed block is being dragged
+    const trashActive = ref(false);     // true while hovering the trash zone
+
+    const editingKey = ref(null);
+    const editDraft = reactive({ title:'', notes:'' });
+
+    const aiOpen = ref(false);
+    const aiLoading = ref(false);
+    const aiResult = ref('');
+    const aiError = ref('');
+
+    function keyOf(day,hour){ return day+'-'+hour; }
+
+    function onDragStartNew(e, categoryKey){
+      dragPayload.value = { mode:'new', categoryKey };
+      e.dataTransfer.effectAllowed = 'copy';
+    }
+    function onDragStartMove(e, fromKey){
+      dragPayload.value = { mode:'move', fromKey };
+      e.dataTransfer.effectAllowed = 'move';
+      isDraggingBlock.value = true;
+      e.stopPropagation();
+    }
+    function onDragEnd(){
+      // fires whether the drag ended on a valid drop target or not (e.g. released mid-air)
+      isDraggingBlock.value = false;
+      trashActive.value = false;
+      dragOverKey.value = null;
+      dragPayload.value = null;
+    }
+    function onDragOverCell(e, day, hour){
+      e.preventDefault();
+      dragOverKey.value = keyOf(day,hour);
+    }
+    function onDragLeaveCell(){
+      dragOverKey.value = null;
+    }
+    function onDrop(e, day, hour){
+      e.preventDefault();
+      dragOverKey.value = null;
+      const payload = dragPayload.value;
+      dragPayload.value = null;
+      if(!payload) return;
+      const targetKey = keyOf(day,hour);
+
+      if(payload.mode === 'new'){
+        const cat = catByKey[payload.categoryKey];
+        blocks[targetKey] = { id: uid++, categoryKey: cat.key, title: cat.name, notes:'' };
+      } else if(payload.mode === 'move'){
+        if(payload.fromKey === targetKey) return;
+        const moving = blocks[payload.fromKey];
+        if(!moving) return;
+        delete blocks[payload.fromKey];
+        blocks[targetKey] = moving;
+      }
+    }
+
+    function removeBlock(key){
+      delete blocks[key];
+      if(editingKey.value === key) editingKey.value = null;
+    }
+
+    function onTrashDragOver(e){
+      e.preventDefault();
+      trashActive.value = true;
+    }
+    function onTrashDragLeave(){
+      trashActive.value = false;
+    }
+    function onDropTrash(e){
+      e.preventDefault();
+      const payload = dragPayload.value;
+      dragPayload.value = null;
+      trashActive.value = false;
+      isDraggingBlock.value = false;
+      if(payload && payload.mode === 'move'){
+        removeBlock(payload.fromKey);
+      }
+    }
+
+    function openEditor(key){
+      const b = blocks[key];
+      if(!b) return;
+      editingKey.value = key;
+      editDraft.title = b.title;
+      editDraft.notes = b.notes;
+    }
+    function closeEditor(){ editingKey.value = null; }
+    function saveEditor(){
+      const key = editingKey.value;
+      if(!key || !blocks[key]) return;
+      blocks[key].title = editDraft.title.trim() || catByKey[blocks[key].categoryKey].name;
+      blocks[key].notes = editDraft.notes;
+      editingKey.value = null;
+    }
+    function deleteFromEditor(){
+      if(editingKey.value) removeBlock(editingKey.value);
+    }
+
+    function clearAll(){
+      if(!Object.keys(blocks).length) return;
+      if(confirm('确定要清空整张日程表吗？')){
+        Object.keys(blocks).forEach(k=> delete blocks[k]);
+      }
+    }
+
+    const categoryHours = computed(()=>{
+      const tally = Object.fromEntries(CATEGORIES.map(c=>[c.key,0]));
+      Object.values(blocks).forEach(b=>{ tally[b.categoryKey] = (tally[b.categoryKey]||0) + 1; });
+      return tally;
+    });
+    const maxCategoryHours = computed(()=> Math.max(1, ...Object.values(categoryHours.value)));
+
+    async function runAIAnalysis(){
+      const entries = Object.entries(blocks);
+      if(!entries.length){
+        aiError.value = '';
+        aiResult.value = '';
+        aiOpen.value = true;
+        aiResult.value = '日程表还是空的。先从左侧拖几个日程块进来，再点一次"AI 分析"，我会结合你的安排和备注给出建议。';
+        return;
+      }
+
+      aiOpen.value = true;
+      aiLoading.value = true;
+      aiError.value = '';
+      aiResult.value = '';
+
+      const summaryLines = entries.map(([key,b])=>{
+        const [day,hour] = key.split('-');
+        const cat = catByKey[b.categoryKey];
+        const noteText = b.notes && b.notes.trim() ? `，备注：${b.notes.trim()}` : '';
+        return `${day} ${hour}:00 【${cat.name}】${b.title}${noteText}`;
+      });
+
+      const hoursSummary = CATEGORIES.map(c=> `${c.name} ${categoryHours.value[c.key]||0} 小时`).join('，');
+
+      const userPrompt =
+`这是一名大学生本周的日程安排（按时间顺序列出，格式为"星期 时间 【类别】标题，备注"）：
+
+${summaryLines.join('\n')}
+
+各类别本周合计时长：${hoursSummary}
+
+请你作为学习与时间管理助手，基于以上安排和备注内容，用简洁的中文给出：
+1. 时间分配上的观察（是否有明显失衡，比如学习/休息/健身占比）；
+2. 从备注内容里能看出的具体情况或潜在问题（如果备注信息很少，就如实说明，不要编造）；
+3. 2-3条具体、可执行的调整建议。
+不要使用markdown标题符号，用简短的自然段或编号列表即可，总字数控制在300字以内。`;
+
+      try{
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1000,
+            system: '你是一个细心、诚实的大学生时间管理助手。只依据用户提供的日程和备注做分析，不要编造用户没写的信息。',
+            messages: [ { role:'user', content: userPrompt } ]
+          })
+        });
+        const data = await response.json();
+        const text = (data.content || [])
+          .filter(item => item.type === 'text')
+          .map(item => item.text)
+          .join('\n')
+          .trim();
+        aiResult.value = text || '没有获取到有效的分析结果，请稍后再试一次。';
+      }catch(err){
+        aiError.value = '分析请求失败，请稍后重试。';
+      }finally{
+        aiLoading.value = false;
+      }
+    }
+
+    return {
+      CATEGORIES, DAYS, HOURS, catByKey,
+      blocks, keyOf,
+      onDragStartNew, onDragStartMove, onDragEnd, onDragOverCell, onDragLeaveCell, onDrop, dragOverKey,
+      isDraggingBlock, trashActive, onTrashDragOver, onTrashDragLeave, onDropTrash,
+      removeBlock, openEditor, closeEditor, saveEditor, deleteFromEditor,
+      editingKey, editDraft,
+      clearAll,
+      categoryHours, maxCategoryHours,
+      aiOpen, aiLoading, aiResult, aiError, runAIAnalysis,
+    };
+  },
+  template: `
+  <div>
+    <div class="topbar">
+      <div>
+        <h1>我的课程表</h1>
+        <div class="sub">把左侧的日程块拖进右边的表格，点击已放入的日程块可以改名字、写备注</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" @click="clearAll">清空表格</button>
+        <button class="btn btn-primary" @click="runAIAnalysis">✦ AI 分析</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- sidebar -->
+      <div class="sidebar">
+        <h2>日程块</h2>
+        <p class="hint">按住拖到右侧表格里的任意一小时格子即可放入。</p>
+
+        <div v-for="cat in CATEGORIES" :key="cat.key"
+             class="chip"
+             :style="{ background: cat.bg, color: cat.color }"
+             draggable="true"
+             @dragstart="onDragStartNew($event, cat.key)">
+          <span class="emoji">{{ cat.emoji }}</span>
+          <span class="label">{{ cat.name }}</span>
+        </div>
+
+        <div class="legend">
+          <h2>本周时长分布</h2>
+          <div class="legend-row" v-for="cat in CATEGORIES" :key="'l-'+cat.key">
+            <div class="name">{{ cat.name }}</div>
+            <div class="bar-track">
+              <div class="bar-fill" :style="{ width: (100*(categoryHours[cat.key]||0)/maxCategoryHours)+'%', background: cat.color }"></div>
+            </div>
+            <div class="hrs">{{ categoryHours[cat.key]||0 }}h</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- board -->
+      <div class="board-wrap">
+        <div class="board">
+          <div class="corner"></div>
+          <div class="head-cell" v-for="d in DAYS" :key="d">{{ d }}</div>
+
+          <template v-for="hour in HOURS" :key="'row-'+hour">
+            <div class="time-cell">{{ hour }}:00</div>
+            <div v-for="d in DAYS" :key="d+'-'+hour"
+                 class="cell"
+                 :class="{ 'drag-over': dragOverKey === keyOf(d,hour) }"
+                 @dragover="onDragOverCell($event, d, hour)"
+                 @dragleave="onDragLeaveCell"
+                 @drop="onDrop($event, d, hour)">
+              <div v-if="blocks[keyOf(d,hour)]"
+                   class="block"
+                   draggable="true"
+                   @dragstart="onDragStartMove($event, keyOf(d,hour))"
+                   @dragend="onDragEnd"
+                   :style="{ background: catByKey[blocks[keyOf(d,hour)].categoryKey].bg, color: catByKey[blocks[keyOf(d,hour)].categoryKey].color }"
+                   @click="openEditor(keyOf(d,hour))">
+                <span class="b-note-dot" v-if="blocks[keyOf(d,hour)].notes"></span>
+                <div class="b-title">{{ blocks[keyOf(d,hour)].title }}</div>
+                <div class="b-cat">{{ catByKey[blocks[keyOf(d,hour)].categoryKey].name }}</div>
+                <button class="b-remove" @click.stop="removeBlock(keyOf(d,hour))">×</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- trash zone: drag a placed block here to delete it -->
+    <div class="trash-zone"
+         v-show="isDraggingBlock"
+         :class="{ active: trashActive }"
+         @dragover="onTrashDragOver"
+         @dragleave="onTrashDragLeave"
+         @drop="onDropTrash">
+      <span class="icon">🗑️</span>
+      <span>{{ trashActive ? '松手即可删除' : '拖到这里删除' }}</span>
+    </div>
+
+    <!-- edit modal -->
+    <div class="overlay" v-if="editingKey" @click.self="closeEditor">
+      <div class="modal">
+        <h3>编辑日程</h3>
+        <span class="cat-tag"
+              :style="{ background: catByKey[blocks[editingKey].categoryKey].bg, color: catByKey[blocks[editingKey].categoryKey].color }">
+          {{ catByKey[blocks[editingKey].categoryKey].emoji }} {{ catByKey[blocks[editingKey].categoryKey].name }}
+        </span>
+        <div class="field">
+          <label>标题</label>
+          <input type="text" v-model="editDraft.title" placeholder="例如：高等数学、爬坡训练" />
+        </div>
+        <div class="field">
+          <label>备注 / 笔记</label>
+          <textarea v-model="editDraft.notes" placeholder="记录这段时间的计划、完成情况或想法..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="deleteFromEditor">删除该日程</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" @click="closeEditor">取消</button>
+            <button class="btn btn-primary" @click="saveEditor">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI drawer -->
+    <div class="backdrop-dim" v-if="aiOpen" @click="aiOpen=false"></div>
+    <div class="ai-drawer" :class="{ open: aiOpen }">
+      <div class="ai-drawer-head">
+        <div>
+          <h3>AI 日程助手</h3>
+          <p>基于你的日程安排和备注给出分析</p>
+        </div>
+        <button class="close-x" @click="aiOpen=false">✕</button>
+      </div>
+      <div class="ai-body">
+        <div v-if="aiLoading" class="ai-loading"><span class="spinner"></span> 正在分析你的日程…</div>
+        <div v-else-if="aiError" class="ai-empty">{{ aiError }}</div>
+        <div v-else-if="aiResult">{{ aiResult }}</div>
+        <div v-else class="ai-empty">点击右上角"AI 分析"，我会结合你放入表格的日程和备注，给出时间分配上的观察和建议。</div>
+      </div>
+    </div>
+  </div>
+  `
+};
+
+createApp(App).mount('#app');
+</script>
+</body>
+</html>
