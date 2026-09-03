@@ -1,5 +1,6 @@
 # 大学生日程表 AI Agent · 第一版
 
+开启docker docker compose start
 这一版分两部分：
 
 1. **`index.html`** —— 一个可以直接打开看效果的交互原型（Vue 3，单文件，无需安装任何东西）。
