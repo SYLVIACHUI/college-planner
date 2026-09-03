@@ -1,0 +1,121 @@
+# 一键启动：docker compose up -d
+# 首次启动会自动下载 qwen3:4b（约 2.5GB），耐心等几分钟。
+# 全部就绪后访问 http://localhost:8080
+
+services:
+  # ---------------------------------------------------------------
+  # MySQL：容器第一次启动时会自动执行 schema.sql 建库建表
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: planner-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-planner123}
+      MYSQL_DATABASE: ${DB_NAME:-student_planner}
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 只在数据目录为空时执行一次；改了 schema.sql 要重跑得先 docker compose down -v
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_PASSWORD:-planner123}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # ---------------------------------------------------------------
+  # Ollama：本地大模型运行时
+  # ---------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: planner-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama   # 模型存这里，重启不用重新下载
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    # === 如果你有 NVIDIA 显卡，取消下面这段注释可以启用 GPU 加速 ===
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ---------------------------------------------------------------
+  # 一次性任务：拉取模型，拉完就退出
+  # ---------------------------------------------------------------
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: planner-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "正在检查模型 $${MODEL} ..."
+        if ollama list | grep -q "$${MODEL%%:*}"; then
+          echo "模型已存在，跳过下载。"
+        else
+          echo "开始下载 $${MODEL}，首次可能需要几分钟…"
+          ollama pull "$${MODEL}"
+        fi
+        echo "模型准备完成。"
+    restart: "no"
+
+  # ---------------------------------------------------------------
+  # Flask 后端
+  # ---------------------------------------------------------------
+  backend:
+    build: .
+    container_name: planner-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-planner123}
+      DB_NAME: ${DB_NAME:-student_planner}
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-180}
+      TZ: Asia/Shanghai
+    expose:
+      - "5000"
+
+  # ---------------------------------------------------------------
+  # Nginx：托管 index.html，同时把 /api 反代到后端
+  # 这样前端和接口同源，不用操心跨域
+  # ---------------------------------------------------------------
+  web:
+    image: nginx:alpine
+    container_name: planner-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  mysql_data:
+  ollama_models:

@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 演示账号：后端目前用固定 user_id=1，没有这条记录的话
+-- schedule_blocks / ai_analyses / ai_chat_messages 的外键会直接插入失败
+INSERT INTO users (id, username, password_hash) VALUES (1, 'demo', 'demo-not-a-real-hash')
+ON DUPLICATE KEY UPDATE username = VALUES(username);
+
 -- 日程类别（学习/健身/作业...），颜色和图标由前端渲染用
 CREATE TABLE IF NOT EXISTS categories (
   id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,4 +64,18 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
   result     TEXT,        -- 模型返回的分析内容
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 多轮对话消息（AI 助手问答）
+-- 一次会话用 session_id 串起来，前端每次刷新可以生成一个新的 session_id，
+-- 也可以固定成一个值，让用户下次打开还能看到之前的对话。
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  user_id    INT NOT NULL,
+  session_id VARCHAR(64) NOT NULL DEFAULT 'default',
+  role       ENUM('user','assistant') NOT NULL,
+  content    TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_session (user_id, session_id, id)
 ) ENGINE=InnoDB;

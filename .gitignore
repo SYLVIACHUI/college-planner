@@ -4,18 +4,21 @@ __pycache__/
 .venv/
 venv/
 
-# Environment variables
-.env
-.env.*
-
-# Node.js
+# Node
 node_modules/
 dist/
 
+# Environment
+.env
+
 # IDE
 .vscode/
-.idea/
 
-# OS
-.DS_Store
-Thumbs.db
+# Logs
+*.log
+
+# Ollama / model data
+models/
+
+# Docker
+docker-data/
